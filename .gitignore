@@ -1,4 +1,5 @@
 # Defaults Exclusions
 *.png
+*.pdf
 *.eps
 *.asv
