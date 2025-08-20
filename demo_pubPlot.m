@@ -15,6 +15,8 @@
 close all; clear; clc; rng(7);
 
 %% 1) Basic usage — single axes
+% Here we just call pubPlot() after calling normal plot commands
+% You will see it reformats the figure and reduces whitespace
 x = linspace(0,2*pi,400);
 y = sin(x).*exp(-0.2*x);
 
@@ -25,9 +27,14 @@ figure('Color','w'); plot(x,y,'-'); title('Damped Sine After pubPlot'); xlabel('
 pubPlot();  % call with defaults
 
 %% 2) Width/height variants (journal + columns + custom height)
+% These example figures show how pubPlot() can account for different figure
+% widths and heights to change the appearance of the figure.
+% We pass them as arguments Width and Height
 widths  = {'single','1.5','double'};
 heights = [180 235 320];
 
+x = linspace(0,2*pi,400);
+y = sin(x).*exp(-0.2*x);
 for i = 1:numel(widths)
     for j = 1:numel(heights)
         figure('Color','w');
@@ -41,6 +48,8 @@ for i = 1:numel(widths)
 end
 
 %% 3) Subplots
+% These examples show how reformatting subplots works
+% Note: Do not use sgtitle
 % Note: pubPlot respects layout of subplots (doesn't override positions)
 
 % Classic subplots (2x2) — stress different label lengths & rotations
@@ -100,7 +109,9 @@ ylabel('y')
 
 pubPlot(Width="double",Height=300,Grid="on",AxisFontSize=12);
 
-%%
+%% 4) Some Limitations:
+% legends are not automatically repositioned, so place them wisely
+x = linspace(-3.8,3.8);
 % Legend styling
 figure('Color','w'); hold on
 plot(x,sin(x),'DisplayName','sin'); 
@@ -108,7 +119,8 @@ plot(x,cos(x),'DisplayName','cos');
 legend('Location','best'); title('Legend demo');
 pubPlot();
 
-% Colorbar note
+% pubPlot() does not currently take into account colorbars, so it will
+% likely be cut off
 figure('Color','w');
 imagesc(peaks(200)); axis image; colormap(parula); colorbar;
 title('imagesc + colorbar'); xlabel('x'); ylabel('y');
@@ -117,7 +129,12 @@ title('imagesc + colorbar'); xlabel('x'); ylabel('y');
 pubPlot(Width="single",Height=220);
 
 
-%% 4) Log axes (semilogx / loglog) + title collision avoidance
+%% 5) Log axes (semilogx / loglog) + title collision avoidance
+% Non-linear axes are supported
+% pubPlot() can also detect if data is overlapping the title and
+% automatically move the title above the ticks
+% You can also set the title to always be above the ticks. Currently the
+% title is middle-aligned with top tick mark and tick label
 figure('Color','w');
 xx = logspace(-2,2,200);
 yy = 1./sqrt(xx) + 0.02*randn(size(xx));
@@ -135,7 +152,9 @@ title('LogLog'); xlabel('x'); ylabel('y');
 % you can force it too
 pubPlot(Width="1.5",MoveTitleAboveAxis=true);
 
-%% 5) Interpreters: 'tex' vs 'latex' vs 'none'
+%% 6) Interpreters: 'tex' vs 'latex' vs 'none'
+% Latex labels are respected
+x = linspace(-3.8,3.8);
 figure('Color','w');
 plot(x, sin(x));
 title('TeX default'); xlabel('x'); ylabel('y');
@@ -154,7 +173,12 @@ title('Literal ^ and _','Interpreter','none');
 xlabel('x_^ (rad)_','Interpreter','none'); ylabel('y^3_','Interpreter','none');
 pubPlot(Interpreter="none");
 
-%% 6) Exporting — EPS via pubPlot, PNG/PDF via exportgraphics
+%% 7) Exporting — EPS via pubPlot, PNG/PDF via exportgraphics
+% Exporting figures is easy with pubPlot().
+% Pass the Filename and extension(s) you want as arguments.
+% IMPORTANT: pubPlot() modifies the .eps file to make importing into
+% Illustrator easier
+
 % EPS (pubPlot post-processes this for nice fonts/bounding box)
 figure('Color','w');
 x = linspace(0,2*pi,400);
@@ -167,10 +191,16 @@ figure('Color','w');
 plot(x,cos(x),'b','LineWidth',1.2); title('Export – PNG/PDF'); xlabel('x'); ylabel('cos(x)');
 pubPlot('Filename','demo_pubPlot_eps','FileExtension',{'.png','.pdf'});  % no filename here
 
-%% 7) Reusing the same “house style” across many figures
+%% 8) Reusing the same “style” across many figures
+% You can also force the same layout in plots if desired.
+% Pass the desired spacing as a set of options from pubPlot().
+% Notice how in the second plot, the same spacing is maintained around the
+% labels and title. Note: you must use the figure with the  most space
+% required, otherwise objects may overlap/clip
+x = linspace(0,2*pi,400);
 figure('Color','w'); plot(x, sin(2*x)); 
 title('Maintain Position'); xlabel('x'); ylabel('sin(2x)');
-[~,opts] = pubPlot();
+[~,opts] = pubPlot(); % the first output is the figure handle of the plot
 
 figure('Color','w'); plot(x, cos(2*x));
 pubPlot(figOptions=opts);

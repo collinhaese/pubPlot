@@ -67,7 +67,7 @@ function [fig, varargout] = pubPlot(NVArgs)
 %
 %   Author : Collin Haese
 %   Date   : 16-August-2025
-%   Ver    : 1.1.2 Alpha
+%   Ver    : 1.1.3 Alpha
 %
 % 
 % TODO:
@@ -80,6 +80,8 @@ function [fig, varargout] = pubPlot(NVArgs)
 % Force board size on eps
 % Exponential Ticks - currently lose the order of magnitude
 % Colorbars not supported
+% Rotated ticks still seems a bit off (recommended to use 45 deg)
+
 
 %----------------------------- Arguments ---------------------------------
 arguments
@@ -327,12 +329,12 @@ if isSubplotFigure
         % format and trim
         if ~isempty(NVArgs.AxisOffset)
             ax = formatAxis(ax, NVArgs);
-            [axList(k), NVArgs.AxisOffset(k,:)] = reduceWhitespace(ax, NVArgs, subW, subH, ...
+            [ax, NVArgs.AxisOffset(k,:)] = reduceWhitespace(ax, NVArgs, subW, subH, ...
                 xOffset=xOff, yOffset=yOff, ...
                 customOffset=NVArgs.AxisOffset(k,:), moveTitle=moveTitleRequired(k));
         else
             ax = formatAxis(ax, NVArgs);
-            [axList(k), AxisOffset] = reduceWhitespace(ax, NVArgs, subW, subH, ...
+            [ax, AxisOffset] = reduceWhitespace(ax, NVArgs, subW, subH, ...
                 xOffset=xOff, yOffset=yOff, ...
                 customOffset=margins, moveTitle=moveTitleRequired(k));
         end
@@ -343,9 +345,9 @@ else
         % Single axes, only one plot for this Figure
         ax = formatAxis(axList(1), NVArgs);
         if ~isempty(NVArgs.AxisOffset)
-            [axList(1), NVArgs.AxisOffset] = reduceWhitespace(ax, NVArgs, figW, figH, customOffset=NVArgs.AxisOffset);
+            [ax, NVArgs.AxisOffset] = reduceWhitespace(ax, NVArgs, figW, figH, customOffset=NVArgs.AxisOffset);
         else
-            [axList(1), AxisOffset] = reduceWhitespace(ax, NVArgs, figW, figH);
+            [ax, AxisOffset] = reduceWhitespace(ax, NVArgs, figW, figH);
         end
 end
 
@@ -552,7 +554,7 @@ function v = roundQtr(v)
     v = round(v*4)/4;
 end
 
-function [fig, figureWidth, figureHeight] = formatFigure(fig,NVArgs)
+function [fig, figureWidth, figureHeight] = formatFigure(fig,ppNVArgs)
 %FORMATFIGURE Standardize figure object properties and size.
 %   Sets figure units to points, hides toolbar if requested, and sets the
 %   width based on journal column model and the requested column count.
@@ -561,12 +563,12 @@ function [fig, figureWidth, figureHeight] = formatFigure(fig,NVArgs)
     fig.Units = 'points';
     
     % hide toolbar in figure
-    fig.ToolBar = NVArgs.ToolBar;
+    fig.ToolBar = ppNVArgs.ToolBar;
     
     % set figure width to correct artwork sizing
     % Note: this is not necessarily the maximum width allowed, but the width I
     % have found works best in the associated Latex/Word template to fit nicely
-    switch string(NVArgs.Journal)
+    switch string(ppNVArgs.Journal)
         % width for [single, 1.5, double]
         case "Elsevier"
             cols = [252,394,536];
@@ -577,7 +579,7 @@ function [fig, figureWidth, figureHeight] = formatFigure(fig,NVArgs)
         case "Wiley"
             cols = [226,352,480];
     end
-    switch string(NVArgs.Width)
+    switch string(ppNVArgs.Width)
         case "single"
             figureWidth = cols(1);
         case "1.5"
@@ -585,15 +587,15 @@ function [fig, figureWidth, figureHeight] = formatFigure(fig,NVArgs)
         case "double"
             figureWidth = cols(3);
         case "custom"
-            figureWidth = NVArgs.CustomWidth;
-            if NVArgs.verbosity > 3
-                fprintf('Custom Width requested, setting to %f',NVArgs.CustomWidth)
+            figureWidth = ppNVArgs.CustomWidth;
+            if ppNVArgs.verbosity > 3
+                fprintf('Custom Width requested, setting to %f',ppNVArgs.CustomWidth)
             end
     end
     
     % height of figure, defaults to 235 points. Larger height allows more
     % vertical whitespace
-    figureHeight = NVArgs.Height;
+    figureHeight = ppNVArgs.Height;
     
     % grab current screen size and place figure at the center
     screenSize = get(0, 'ScreenSize');  % [x y width height] in pixels
@@ -607,22 +609,22 @@ function [fig, figureWidth, figureHeight] = formatFigure(fig,NVArgs)
     
 end
 
-function ax = formatAxis(ax,NVArgs)
+function ax = formatAxis(ax,ppNVArgs)
 %FORMATAXIS Apply consistent axis/line/legend/text styling.
         
     % set axis properties and color
-    set(ax,'FontName',NVArgs.FontName,'FontSize',NVArgs.AxisFontSize, ...
-           'LineWidth',NVArgs.AxisLineWidth,'TickDir','out','Box','off', ...
-           'XColor',NVArgs.AxisColor,'YColor',NVArgs.AxisColor,'ZColor',NVArgs.AxisColor);
+    set(ax,'FontName',ppNVArgs.FontName,'FontSize',ppNVArgs.AxisFontSize, ...
+           'LineWidth',ppNVArgs.AxisLineWidth,'TickDir','out','Box','off', ...
+           'XColor',ppNVArgs.AxisColor,'YColor',ppNVArgs.AxisColor,'ZColor',ppNVArgs.AxisColor);
     % change background color
-    ax.Color = NVArgs.BoxColor;
+    ax.Color = ppNVArgs.BoxColor;
 
     % set grid properties
     % turn on or off
-    grid(ax, NVArgs.Grid);
-    if NVArgs.Grid
-        ax.GridLineWidth = NVArgs.GridLineWidth;
-        ax.GridColor     = NVArgs.GridColor;
+    grid(ax, ppNVArgs.Grid);
+    if ppNVArgs.Grid
+        ax.GridLineWidth = ppNVArgs.GridLineWidth;
+        ax.GridColor     = ppNVArgs.GridColor;
     end 
     
     % scale labels and fonts to 1.0 of text size
@@ -632,30 +634,30 @@ function ax = formatAxis(ax,NVArgs)
     % set all line stroke properties and marker sizes
     lines = findall(ax, 'Type', 'Line');
     for i = 1 : numel(lines)
-        lines(i).LineWidth  = NVArgs.LineWidth;
-        lines(i).MarkerSize = NVArgs.MarkerSize;
+        lines(i).LineWidth  = ppNVArgs.LineWidth;
+        lines(i).MarkerSize = ppNVArgs.MarkerSize;
     end
     
     % set legend properties to font properties
     leg = findobj(gcf, 'Type', 'Legend');
     for i = 1 : length(leg)
-        set(leg(i), 'FontSize', NVArgs.FontSize, 'Box', 'off',...
-                    'Interpreter', NVArgs.Interpreter);
+        set(leg(i), 'FontSize', ppNVArgs.FontSize, 'Box', 'off',...
+                    'Interpreter', ppNVArgs.Interpreter);
     end
     
     % set title font properties
-    title(ax.Title.String, 'FontSize', NVArgs.FontSize, ...
-        'FontWeight', ax.Title.FontWeight, 'Interpreter', NVArgs.Interpreter,...
-        'Color', NVArgs.FontColor,'Parent',ax);
+    set(ax.Title, 'FontSize', ppNVArgs.FontSize, ...
+        'FontWeight', ax.Title.FontWeight, 'Interpreter', ppNVArgs.Interpreter,...
+        'Color', ppNVArgs.FontColor,'Parent',ax);
     
     % set axis label and tick font properties
-    xlabel(ax.XLabel.String, 'FontSize', NVArgs.AxisFontSize, 'FontWeight', ax.XLabel.FontWeight,...
-        'Interpreter', NVArgs.Interpreter, 'Color', NVArgs.FontColor);
-    ylabel(ax.YLabel.String, 'FontSize', NVArgs.AxisFontSize, 'FontWeight', ax.YLabel.FontWeight,...
-        'Interpreter', NVArgs.Interpreter, 'Color', NVArgs.FontColor);
+    set(ax.XLabel, 'FontSize', ppNVArgs.AxisFontSize, 'FontWeight', ax.XLabel.FontWeight,...
+        'Interpreter', ppNVArgs.Interpreter, 'Color', ppNVArgs.FontColor);
+    set(ax.YLabel, 'FontSize', ppNVArgs.AxisFontSize, 'FontWeight', ax.YLabel.FontWeight,...
+        'Interpreter', ppNVArgs.Interpreter, 'Color', ppNVArgs.FontColor);
 end
 
-function [ax, axisOffset] = reduceWhitespace(ax,figNVArgs,subW,subH,NVArgs)
+function [ax, axisOffset] = reduceWhitespace(ax,ppNVArgs,subW,subH,NVArgs)
 %REDUCEWHITESPACE Trim margins, redraw ticks/labels in point units, and place title.
 %
 %   Handles linear/log axes via mapDataToPoints, keeps labels aligned in a
@@ -664,7 +666,7 @@ function [ax, axisOffset] = reduceWhitespace(ax,figNVArgs,subW,subH,NVArgs)
 
     arguments
         ax (1,1) matlab.graphics.axis.Axes
-        figNVArgs (1,1) struct
+        ppNVArgs (1,1) struct
         subW (1,1) double {numericPositiveScalar}
         subH (1,1) double {numericPositiveScalar}
         NVArgs.xOffset (1,1) double {numericPositiveScalar} = 0
@@ -687,10 +689,10 @@ function [ax, axisOffset] = reduceWhitespace(ax,figNVArgs,subW,subH,NVArgs)
         return
     end
         
-    Spacing = figNVArgs.SpacingOffset;
+    Spacing = ppNVArgs.SpacingOffset;
     xOffset = NVArgs.xOffset;
     yOffset = NVArgs.yOffset;
-    tickLength = figNVArgs.TickLength(1); % desired tick length
+    tickLength = ppNVArgs.TickLength(1); % desired tick length
     
     % record axis limits and labels to preserve their original values
     XLim = ax.XLim;
@@ -709,7 +711,7 @@ function [ax, axisOffset] = reduceWhitespace(ax,figNVArgs,subW,subH,NVArgs)
     % Compute offsets if not supplied
     if isempty(NVArgs.customOffset)
         % determine offsets to avoid clipping text
-        [leftOffset, rightOffset, bottomOffset, topOffset, NVArgs.moveTitle] = getTextExtents(ax, figNVArgs, subW, subH);
+        [leftOffset, rightOffset, bottomOffset, topOffset, NVArgs.moveTitle] = getTextExtents(ax, ppNVArgs, subW, subH);
     else
         assert(numel(NVArgs.customOffset)==4,'customOffset must be of the form [leftOffset, rightOffset, bottomOffset, topOffset].');
         leftOffset   = NVArgs.customOffset(1);
@@ -768,7 +770,7 @@ function [ax, axisOffset] = reduceWhitespace(ax,figNVArgs,subW,subH,NVArgs)
             'HorizontalAlignment', horizAlign, ...
             'VerticalAlignment',   vertAlign, ...
             'FontSize', ax.FontSize, 'FontName', ax.FontName, ...
-            'Color', figNVArgs.FontColor, ...
+            'Color', ppNVArgs.FontColor, ...
             'Clipping','off');    % allow negative y
     end
 
@@ -784,7 +786,7 @@ function [ax, axisOffset] = reduceWhitespace(ax,figNVArgs,subW,subH,NVArgs)
             'HorizontalAlignment', horizAlign, ...
             'VerticalAlignment',   vertAlign, ...
             'FontSize', ax.FontSize, 'FontName', ax.FontName, ...
-            'Color', figNVArgs.FontColor, ...
+            'Color', ppNVArgs.FontColor, ...
             'Clipping','off');
     end
 
@@ -796,7 +798,7 @@ function [ax, axisOffset] = reduceWhitespace(ax,figNVArgs,subW,subH,NVArgs)
             'Parent', ax, 'Units','points', ...
             'HorizontalAlignment','center', 'VerticalAlignment','bottom', ...
             'FontSize', ax.FontSize,'FontName',ax.FontName,...
-            'Color', figNVArgs.FontColor,'Interpreter',figNVArgs.Interpreter);
+            'Color', ppNVArgs.FontColor,'Interpreter',ppNVArgs.Interpreter);
         ax.XLabel.String = '';
     end
 
@@ -807,19 +809,19 @@ function [ax, axisOffset] = reduceWhitespace(ax,figNVArgs,subW,subH,NVArgs)
             'HorizontalAlignment','center', 'VerticalAlignment','top', ...
             'Rotation',90, ...
             'FontSize', ax.FontSize,'FontName',ax.FontName,...
-            'Color', figNVArgs.FontColor,'Interpreter',figNVArgs.Interpreter);
+            'Color', ppNVArgs.FontColor,'Interpreter',ppNVArgs.Interpreter);
         ax.YLabel.String = '';
     end
 
     % Manually place title (option to lift above axis line)
     if ~isempty(ax.Title.String)
-        putAbove = figNVArgs.MoveTitleAboveAxis || any(NVArgs.moveTitle);
+        putAbove = ppNVArgs.MoveTitleAboveAxis || any(NVArgs.moveTitle);
         va = ternary(putAbove,'bottom','middle');
         text(axisW/2, axisH, ax.Title.String, ...
             'Parent', ax, 'Units','points', ...
             'HorizontalAlignment','center','VerticalAlignment',va, ...
             'FontSize', ax.FontSize,'FontName',ax.FontName, ...
-            'Color', figNVArgs.FontColor,'Interpreter',figNVArgs.Interpreter);
+            'Color', ppNVArgs.FontColor,'Interpreter',ppNVArgs.Interpreter);
         ax.Title.String = '';
     end
 
@@ -827,16 +829,17 @@ function [ax, axisOffset] = reduceWhitespace(ax,figNVArgs,subW,subH,NVArgs)
 
 end
 
-function [leftOffset, rightOffset, bottomOffset, topOffset, moveTitle] = getTextExtents(ax,NVArgs,subW,subH)
+function [leftOffset, rightOffset, bottomOffset, topOffset, moveTitle] = getTextExtents(ax,ppNVArgs,subW,subH)
 %GETTEXTEXTENTS Compute margins required to avoid clipping ticks/labels.
 %
 %   Returns LEFT/RIGHT/BOTTOM/TOP offsets in points that guarantee room for
 %   the longest tick label, axis labels, tick marks, and (optionally) any
 %   title. Also checks whether plotted data overlaps the title glyph box,
 %   suggesting the title be moved above the axes.
+%   Also checks for color bars
 
-    Spacing = NVArgs.SpacingOffset;
-    tickLength = NVArgs.TickLength(1);
+    Spacing = ppNVArgs.SpacingOffset;
+    tickLength = ppNVArgs.TickLength(1);
     XTickRotation = ax.XTickLabelRotation;
     YTickRotation = ax.YTickLabelRotation;
 
@@ -847,7 +850,7 @@ function [leftOffset, rightOffset, bottomOffset, topOffset, moveTitle] = getText
     % For the longest X tick string, find the height for calc. extents
     if ~isempty(ax.XTick)
         Lx = cellfun(@strlength, ax.XTickLabel); [~,ix] = max(Lx);
-        [~,~,b,t] = measureTextOverhang(ax.XTickLabel{ix}, XTickRotation, NVArgs.FontName, NVArgs.AxisFontSize, NVArgs.Interpreter, xHA, xVA);
+        [~,~,b,t] = measureTextOverhang(ax.XTickLabel{ix}, XTickRotation, ppNVArgs.FontName, ppNVArgs.AxisFontSize, ppNVArgs.Interpreter, xHA, xVA);
         xTickHeight = b + t;
     else
         xTickHeight = 0;
@@ -856,7 +859,7 @@ function [leftOffset, rightOffset, bottomOffset, topOffset, moveTitle] = getText
     % For the longest Y tick string, find the width for calc. extents
     if ~isempty(ax.YTick)
         Ly = cellfun(@strlength, ax.YTickLabel); [~,iy] = max(Ly);
-        [l,r,~,~] = measureTextOverhang(ax.YTickLabel{iy}, YTickRotation, NVArgs.FontName, NVArgs.AxisFontSize, NVArgs.Interpreter, yHA, yVA);
+        [l,r,~,~] = measureTextOverhang(ax.YTickLabel{iy}, YTickRotation, ppNVArgs.FontName, ppNVArgs.AxisFontSize, ppNVArgs.Interpreter, yHA, yVA);
         yTickWidth = l + r;
     else
         yTickWidth = 0;
@@ -865,18 +868,16 @@ function [leftOffset, rightOffset, bottomOffset, topOffset, moveTitle] = getText
     % Find extent of the text box for last tick labels (the ones which may fall
     % outside of the figure, i.e. at the X and Y limits)
     if ~isempty(ax.XTick)
-        [l,r,b,t] = measureTextOverhang(ax.XTickLabel{end},XTickRotation,NVArgs.FontName,NVArgs.AxisFontSize,NVArgs.Interpreter,xHA,xVA);
+        [xEdgeHalfL,xEdgeHalfR,b,t] = measureTextOverhang(ax.XTickLabel{end},XTickRotation,ppNVArgs.FontName,ppNVArgs.AxisFontSize,ppNVArgs.Interpreter,xHA,xVA);
         % horizontal half-extent of the last tick label (already includes rotation)
-        xEdgeHalf = max(l,r);
     else
-        xEdgeHalf = 0;
+        xEdgeHalfR = 0;
     end
     if ~isempty(ax.YTick)
-        [l,r,b,t] = measureTextOverhang(ax.YTickLabel{end},YTickRotation,NVArgs.FontName,NVArgs.AxisFontSize,NVArgs.Interpreter,yHA,yVA);
+        [l,r,yEdgeHalfB,yEdgeHalfT] = measureTextOverhang(ax.YTickLabel{end},YTickRotation,ppNVArgs.FontName,ppNVArgs.AxisFontSize,ppNVArgs.Interpreter,yHA,yVA);
         % vertical half-extent of the last tick label (already includes rotation)
-        yEdgeHalf = max(b,t);
     else
-        yEdgeHalf = 0;
+        yEdgeHalfT = 0;
     end
     
     % Find X and Y axis label extents
@@ -903,6 +904,29 @@ function [leftOffset, rightOffset, bottomOffset, topOffset, moveTitle] = getText
     else
         leftOffset = 3*Spacing + yLabelSize(1) + yTickWidth + tickLength;
     end
+
+    % Ensure first X tick label fits
+    % minimum left margin
+    minLeft = Spacing;
+
+    % check the first tick value
+    if ~isempty(ax.XTick)
+        xFirst = ax.XTick(1);
+    else
+        xFirst = ax.XLim(1);  % fall back to axis max
+    end
+
+    % map last tick to plot coordinates (points) from the LEFT edge
+    xCenter = leftOffset + ...
+              mapDataToPoints(ax.XScale, ax.XLim, xFirst, subW - leftOffset - minLeft);
+
+    % determine how far the right edge of the label extends beyond the axis
+    overhangL = xCenter - xEdgeHalfL;  
+
+    if overhangL < 0
+        % reserve extra on top of leftOffset so the label fits exactly
+        leftOffset = leftOffset + abs(ceil(4*(overhangL))/4);
+    end
     
     % --------------------------- RIGHT OFFSET ---------------------------
     % Ensure last X tick label fits
@@ -924,14 +948,14 @@ function [leftOffset, rightOffset, bottomOffset, topOffset, moveTitle] = getText
               mapDataToPoints(ax.XScale, ax.XLim, xLast, plotWminR);
 
     % determine how far the right edge of the label extends beyond the axis
-    overhangR = (xCenter + xEdgeHalf) - subW;  
+    overhangR = (xCenter + xEdgeHalfR) - subW;  
 
     if overhangR > 0
         % reserve extra on top of minRight so the label fits exactly
         rightOffset = ceil(4*(minRight + overhangR + padding))/4;
-    elseif NVArgs.AxisLineWidth > minRight
+    elseif ppNVArgs.AxisLineWidth > minRight
         % ensure the axes path itself doesn't touch the border
-        rightOffset = NVArgs.AxisLineWidth + padding;
+        rightOffset = ppNVArgs.AxisLineWidth + padding;
     else
         rightOffset = minRight + padding;
     end
@@ -939,6 +963,29 @@ function [leftOffset, rightOffset, bottomOffset, topOffset, moveTitle] = getText
     % --------------------------- BOTTOM OFFSET ---------------------------
     % distance from the bottom edge to the origin
     bottomOffset = (1*Spacing + xLabelSize(2) + xTickHeight + tickLength);
+
+    % Ensure first Y tick label fits
+    % minimum top margin
+    minBottom = Spacing;
+
+    % check the first tick value
+    if ~isempty(ax.YTick)
+        yFirst = ax.YTick(1);
+    else
+        yFirst = ax.YLim(2);
+    end
+
+    % map last tick to plot coordinates (points) from the BOTTOM edge
+    yCenter = bottomOffset + ...
+              mapDataToPoints(ax.YScale, ax.YLim, yFirst, subH - bottomOffset - minBottom);
+    
+    % determine how far the top edge of the label extends beyond the axis
+    overhangB = yCenter - yEdgeHalfB;
+
+    if overhangB < 0
+        % reserve extra on top of leftOffset so the label fits exactly
+        bottomOffset = bottomOffset + abs(ceil(4*(overhangB))/4);
+    end
 
     % ---------------------------- TOP OFFSET ----------------------------
     % Ensure last Y tick label fits
@@ -960,14 +1007,14 @@ function [leftOffset, rightOffset, bottomOffset, topOffset, moveTitle] = getText
               mapDataToPoints(ax.YScale, ax.YLim, yLast, plotHminT);
     
     % determine how far the top edge of the label extends beyond the axis
-    overhangT = (yCenter + yEdgeHalf) - subH;
+    overhangT = (yCenter + yEdgeHalfT) - subH;
 
     if overhangT > 0
         % reserve extra on top of minRight so the label fits exactly
         topOffset = ceil(4*(minTop + overhangT  + padding))/4;
-    elseif NVArgs.AxisLineWidth > minTop
+    elseif ppNVArgs.AxisLineWidth > minTop
         % ensure the axes path itself doesn't touch the border
-        topOffset = NVArgs.AxisLineWidth + padding;
+        topOffset = ppNVArgs.AxisLineWidth + padding;
     else
         topOffset = minTop + padding;
     end
@@ -986,8 +1033,8 @@ function [leftOffset, rightOffset, bottomOffset, topOffset, moveTitle] = getText
         % measure visible title glyph box for a centered, middle-anchored title
         % (assumed)
         [L,R,B,T] = measureTextOverhang(ax.Title.String, ax.Title.Rotation, ...
-            NVArgs.FontName, NVArgs.AxisFontSize, ...
-            NVArgs.Interpreter, 'center','middle');
+            ppNVArgs.FontName, ppNVArgs.AxisFontSize, ...
+            ppNVArgs.Interpreter, 'center','middle');
 
         % title bounds in points
         titleXExt = axisW/2 + [-L, R];         % [xmin xmax] in points
@@ -1018,7 +1065,7 @@ function [leftOffset, rightOffset, bottomOffset, topOffset, moveTitle] = getText
                         ypt(m) >= titleYExt(1) & ypt(m) <= titleYExt(2);
 
                     if any(hit)
-                        if NVArgs.verbosity > 2
+                        if ppNVArgs.verbosity > 2
                         fprintf(['Title overlaps plotted data. Increasing' ...
                             ' top offset and moving the title.\n']);
                         end
@@ -1069,24 +1116,24 @@ function [va,ha] = tickAlignForRotation(rot, axis)
 %   Returns VerticalAlignment VA and HorizontalAlignment HA.
 
     if axis == 'x'
-        if rot > 45
-            if rot > 135,  va = 'bottom'; ha = 'center';
+        if rot >= 45
+            if rot >= 135,  va = 'bottom'; ha = 'center';
             else           va = 'middle'; ha = 'right';
             end
-        elseif rot < -45
-            if rot < -135, va = 'bottom'; ha = 'center';
+        elseif rot <= -45
+            if rot <= -135, va = 'bottom'; ha = 'center';
             else           va = 'middle'; ha = 'left';
             end
         else
             va = 'top'; ha = 'center';
         end
     else % 'y'
-        if rot > 45
-            if rot > 135,  ha = 'left';   va = 'middle';
+        if rot >= 45
+            if rot >= 135,  ha = 'left';   va = 'middle';
             else           ha = 'center'; va = 'bottom';
             end
-        elseif rot < -45
-            if rot < -135, ha = 'left';   va = 'middle';
+        elseif rot <= -45
+            if rot <= -135, ha = 'left';   va = 'middle';
             else           ha = 'center'; va = 'top';
             end
         else
