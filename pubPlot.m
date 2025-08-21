@@ -11,7 +11,7 @@ function [fig, varargout] = pubPlot(NVArgs)
 %   ----------------------------------------------------------------------
 %   Figure              : (figure handle) figure to format. Default: gcf
 %   Filename            : (char) "Filename" to export. Default: ''
-%   FileExtension   : {char} .FilenameExtension to export. Default: '.eps'
+%   FileExtension       : {char} .FilenameExtension to export. Default: '.eps'
 %   Width               : {'single','1.5','double','custom'} column width. Default: 'single'
 %   Journal             : {'Elsevier','Springer','Nature','Wiley'} page model. Default: 'Elsevier'
 %   Height              : (double) overall figure height [pt]. Default: 235
@@ -66,21 +66,19 @@ function [fig, varargout] = pubPlot(NVArgs)
 %     band using those margins.
 %
 %   Author : Collin Haese
-%   Date   : 16-August-2025
-%   Ver    : 1.1.3 Alpha
+%   Date   : 21-August-2025
+%   Ver    : 1.1.4 Alpha
 %
 % 
 % TODO:
 % Tex interpreter breaks eps export?
 % Only supports RGB triplet colors
 % Validate font names
-% Subplotting
-%   Check support for tiledLayout
-% Manually set text sizes to account for extra whitespace
 % Force board size on eps
 % Exponential Ticks - currently lose the order of magnitude
 % Colorbars not supported
 % Rotated ticks still seems a bit off (recommended to use 45 deg)
+% Rotated ticks on yyaxis is unchecked
 
 
 %----------------------------- Arguments ---------------------------------
@@ -204,6 +202,9 @@ else
     AxisOffset = [];
 end
 
+% Look for visible colorbars, use findobj:
+hasVisibleCB = ~isempty(findobj(fig,'Type','ColorBar','Visible','on'));
+
 %---------------------- FIGURE-LEVEL FORMATTING --------------------------
 
 [fig, figW, figH] = formatFigure(fig,NVArgs);
@@ -261,7 +262,15 @@ if isSubplotFigure
 
     % measure text extents for each axes at its *current* size as a proxy
     for k = 1 : numel(axList)
-        [L,R,B,T,moveTitleRequired(k)] = getTextExtents(axList(k), NVArgs, widths(k), heights(k));
+        if hasVisibleCB
+            % if any colorbar is detected, print warning
+            if NVArgs.verbosity > 1
+                warning('Colorbar detected in subplot. Supergrid colorbars are not currently supported. Supress this message by setting verbosity < 2.')
+            end
+            [L,R,B,T,moveTitleRequired(k)] = getTextExtents(axList(k), NVArgs, widths(k), heights(k), 'hasVisibleCB',true, 'moveTitle', NVArgs.MoveTitleAboveAxis);
+        else
+            [L,R,B,T,moveTitleRequired(k)] = getTextExtents(axList(k), NVArgs, widths(k), heights(k), 'moveTitle', NVArgs.MoveTitleAboveAxis);
+        end
         % apply left margin to the starting column only
         colMarginL(colStart(k)) = max(colMarginL(colStart(k)), L);
         % apply right margin to the ending column only
@@ -345,9 +354,21 @@ else
         % Single axes, only one plot for this Figure
         ax = formatAxis(axList(1), NVArgs);
         if ~isempty(NVArgs.AxisOffset)
-            [ax, NVArgs.AxisOffset] = reduceWhitespace(ax, NVArgs, figW, figH, customOffset=NVArgs.AxisOffset);
+            if hasVisibleCB
+                [ax, NVArgs.AxisOffset] = reduceWhitespace(ax, NVArgs, figW, figH,...
+                    customOffset=NVArgs.AxisOffset, hasVisibleCB=true, moveTitle=NVArgs.MoveTitleAboveAxis);
+            else
+                [ax, NVArgs.AxisOffset] = reduceWhitespace(ax, NVArgs, figW, figH,...
+                    customOffset=NVArgs.AxisOffset, moveTitle=NVArgs.MoveTitleAboveAxis);
+            end
         else
-            [ax, AxisOffset] = reduceWhitespace(ax, NVArgs, figW, figH);
+            if hasVisibleCB
+                [ax, AxisOffset] = reduceWhitespace(ax, NVArgs, figW, figH,...
+                    hasVisibleCB=true, moveTitle=NVArgs.MoveTitleAboveAxis);
+            else
+                [ax, AxisOffset] = reduceWhitespace(ax, NVArgs, figW, figH, ...
+                    moveTitle=NVArgs.MoveTitleAboveAxis);
+            end
         end
 end
 
@@ -368,7 +389,7 @@ if ~isempty(NVArgs.Filename)
         warning('Issue exporting graphic.')
     end
     
-    if contains(FileExtensions,'.eps')
+    if any(contains(FileExtensions,'.eps'))
         % Modify postscript file to enable easy opening in Illustrator
         % Lightly post-process for font embedding/renaming and artboard size
 
@@ -385,9 +406,9 @@ if ~isempty(NVArgs.Filename)
             fontList = {'Arial';'Arial-Bold';'Arial-Italic';'Arial-BoldItalic'};
         end
 
-        inFontDict = 0; % font dictionary flag
-        inReencode = 0; % font reencoding flag
-        replaceFontCmd = 0; % place font command
+        inFontDict = false; % font dictionary flag
+        inReencode = false; % font reencoding flag
+        replaceFontCmd = false; % place font command
 
         % loop through all lines and modify
         for i = 1 : numel(lines)
@@ -457,6 +478,11 @@ if ~isempty(NVArgs.Filename)
 
         end
 
+        % remove first line if it is empty
+        if strcmp(out(1),string())
+            out = out(2:end);
+        end
+
         %--------------------------- REWRITE FILE -----------------------------
         fid = fopen([Filename,'.eps'],'w');
         for i = 1 : numel(out)
@@ -464,7 +490,9 @@ if ~isempty(NVArgs.Filename)
         end
         fclose(fid);
 
-        if strcmpi(NVArgs.ExportMessage,'on')
+        if strcmpi(NVArgs.ExportMessage,'on') 
+            fprintf('Successfully updated and exported %s. Supress this message by setting ExportMessage=''off.''\n',Filename)
+        elseif NVArgs.verbosity > 2 
             fprintf('Successfully updated and exported %s.\n',Filename)
         end
 
@@ -672,7 +700,8 @@ function [ax, axisOffset] = reduceWhitespace(ax,ppNVArgs,subW,subH,NVArgs)
         NVArgs.xOffset (1,1) double {numericPositiveScalar} = 0
         NVArgs.yOffset (1,1) double {numericPositiveScalar} = 0
         NVArgs.customOffset double = []
-        NVArgs.moveTitle logical = false
+        NVArgs.moveTitle (1,1) logical = false
+        NVArgs.hasVisibleCB (1,1) logical = false
     end
     
     % manually reduce whitespace
@@ -688,13 +717,26 @@ function [ax, axisOffset] = reduceWhitespace(ax,ppNVArgs,subW,subH,NVArgs)
         drawnow;
         return
     end
-        
+
+    moveTitle = false;
+
+    % Warn if we detect two axes perfectly overlapping
+    axSiblings = findall(ancestor(ax,'figure'),'Type','axes');
+    sameRect = arrayfun(@(a) isequal(round(a.Position,4), round(ax.Position,4)), axSiblings);
+    if sum(sameRect) > 1 && ~hasDualYAxis(ax)
+        warning('Overlaid axes detected (plotyy-style). Formatting both; margins may need manual review.');
+    end
+
     Spacing = ppNVArgs.SpacingOffset;
     xOffset = NVArgs.xOffset;
     yOffset = NVArgs.yOffset;
     tickLength = ppNVArgs.TickLength(1); % desired tick length
     
     % record axis limits and labels to preserve their original values
+    if hasDualYAxis(ax)
+        yyaxis left
+    end
+
     XLim = ax.XLim;
     YLim = ax.YLim;
     XTick = ax.XTick;
@@ -703,6 +745,7 @@ function [ax, axisOffset] = reduceWhitespace(ax,ppNVArgs,subW,subH,NVArgs)
     YTickLabels = ax.YTickLabel;
     XTickRotation = ax.XTickLabelRotation;
     YTickRotation = ax.YTickLabelRotation;
+    Title = ax.Title.String;
 
     if (abs(XTickRotation) > 180) || (abs(YTickRotation) > 180)
         warning('Warning: Tick Rotations > 180 or < -180 detected. Behavior may be unexpected.')
@@ -711,7 +754,11 @@ function [ax, axisOffset] = reduceWhitespace(ax,ppNVArgs,subW,subH,NVArgs)
     % Compute offsets if not supplied
     if isempty(NVArgs.customOffset)
         % determine offsets to avoid clipping text
-        [leftOffset, rightOffset, bottomOffset, topOffset, NVArgs.moveTitle] = getTextExtents(ax, ppNVArgs, subW, subH);
+        if NVArgs.hasVisibleCB
+            [leftOffset, rightOffset, bottomOffset, topOffset, moveTitle] = getTextExtents(ax, ppNVArgs, subW, subH, 'hasVisibleCB',true, 'moveTitle', NVArgs.moveTitle);
+        else
+            [leftOffset, rightOffset, bottomOffset, topOffset, moveTitle] = getTextExtents(ax, ppNVArgs, subW, subH, 'moveTitle', NVArgs.moveTitle);
+        end
     else
         assert(numel(NVArgs.customOffset)==4,'customOffset must be of the form [leftOffset, rightOffset, bottomOffset, topOffset].');
         leftOffset   = NVArgs.customOffset(1);
@@ -756,7 +803,8 @@ function [ax, axisOffset] = reduceWhitespace(ax,ppNVArgs,subW,subH,NVArgs)
 
     % Remove exisiting tick labels and redraw as text so we can position in
     % point space
-    ax.XTickLabel = {};  ax.YTickLabel = {};
+    ax.XTickLabel = {};  
+    if hasDualYAxis(ax); ax.YAxis(1).TickLabels = {}; else; ax.YTickLabel = {}; end
 
     % X ticks
     for i = 1 : numel(XTick)
@@ -774,6 +822,8 @@ function [ax, axisOffset] = reduceWhitespace(ax,ppNVArgs,subW,subH,NVArgs)
             'Clipping','off');    % allow negative y
     end
 
+
+    % Left-side y-axis
     % Y ticks
     for i = 1 : numel(YTick)
         xLoc = -(2*Spacing + tickLength); % to the left of axis line
@@ -813,9 +863,46 @@ function [ax, axisOffset] = reduceWhitespace(ax,ppNVArgs,subW,subH,NVArgs)
         ax.YLabel.String = '';
     end
 
+    %  Right-side y-axis (yyaxis)
+    if hasDualYAxis(ax)
+        
+        rinfo = getYAxisInfo(ax,2);
+
+        % Map right y-data to points using the right ruler's scale/limits
+        YDataToPt_R = @(y) mapDataToPoints(rinfo.Scale, rinfo.Limits, y, axisH);
+
+        % Suppress built-in right tick labels so we don't double-draw
+        try, ax.YAxis(2).TickLabels = {}; end
+
+        % Place right tick labels (to the right of the axis frame)
+        for i = 1:numel(rinfo.Ticks)
+            yLoc = YDataToPt_R(rinfo.Ticks(i));
+            if i <= numel(rinfo.Labels)
+                text( axisW + (2*Spacing + tickLength), yLoc, rinfo.Labels{i}, ...
+                    'Parent', ax, 'Units','points', ...
+                    'HorizontalAlignment','left', 'VerticalAlignment','middle', ...
+                    'FontSize', ax.FontSize, 'FontName', ax.FontName, ...
+                    'Color', rinfo.Color, 'Clipping','off');
+            end
+        end
+
+        % Place right ylabel (vertical, reading bottom-up)
+        if ~isempty(rinfo.LabelStr)
+            text( axisW + (rightOffset - Spacing), axisH/2, rinfo.LabelStr, ...
+                'Parent', ax, 'Units','points', ...
+                'Rotation', -90, 'HorizontalAlignment','center', 'VerticalAlignment','top', ...
+                'FontSize', ax.FontSize, 'FontName', ax.FontName, 'Color', rinfo.Color);
+            % clear the native label so we don't duplicate
+            try, ax.YAxis(2).Label.String = ''; end
+        end
+
+        yyaxis left
+
+    end
+
     % Manually place title (option to lift above axis line)
     if ~isempty(ax.Title.String)
-        putAbove = ppNVArgs.MoveTitleAboveAxis || any(NVArgs.moveTitle);
+        putAbove = ppNVArgs.MoveTitleAboveAxis || any([NVArgs.moveTitle, moveTitle]);
         va = ternary(putAbove,'bottom','middle');
         text(axisW/2, axisH, ax.Title.String, ...
             'Parent', ax, 'Units','points', ...
@@ -825,11 +912,75 @@ function [ax, axisOffset] = reduceWhitespace(ax,ppNVArgs,subW,subH,NVArgs)
         ax.Title.String = '';
     end
 
+    % Adjust colorbar if present
+    if NVArgs.hasVisibleCB
+        % Find all colorbars for this axis
+        cbs = colorbarsForAxes(ax);
+        for k = 1 : numel(cbs)
+            cb = cbs(k);
+            loc = lower(string(cb.Location));
+            pos = cb.Position; % [x y w h] in points
+            switch loc
+                % adjust position based on location
+                case "eastoutside"
+                    % no adjustment needed
+                case "westoutside"
+                    % place outside yticks
+                    [yVA,yHA] = tickAlignForRotation(YTickRotation,'y');
+
+                    % For the longest Y tick string, find the width for calc. extents
+                    if ~isempty(YTick)
+                        Ly = cellfun(@strlength, YTickLabels); [~,iy] = max(Ly);
+                        [l,r,~,~] = measureTextOverhang(YTickLabels{iy}, YTickRotation, ppNVArgs.FontName, ppNVArgs.AxisFontSize, ppNVArgs.Interpreter, yHA, yVA);
+                        yTickWidth = l + r;
+                    else
+                        yTickWidth = 0;
+                    end
+
+                    cb.Position = [pos(1)-yTickWidth...
+                        ,pos(2),pos(3),pos(4)];
+                case "northoutside"
+                    % move above title
+                    if any([NVArgs.moveTitle, moveTitle])
+                        if ~isempty(Title)
+                            [~,~,b,t] = measureTextOverhang(Title, 0, ppNVArgs.FontName, ppNVArgs.AxisFontSize, ppNVArgs.Interpreter, 'center', 'middle');
+                            titleHeight = t;
+                        else
+                            titleHeight = 0;
+                        end
+
+                        cb.Position = [pos(1),...
+                            pos(2)+titleHeight,pos(3),pos(4)];
+                    end
+                case "southoutside"
+                    % place below xticks
+                    [xVA,xHA] = tickAlignForRotation(XTickRotation,'x');
+                    % For the longest X tick string, find the height for calc. extents
+                    if ~isempty(XTick)
+                        Lx = cellfun(@strlength, XTickLabels); [~,ix] = max(Lx);
+                        [~,~,b,t] = measureTextOverhang(XTickLabels{ix}, XTickRotation, ppNVArgs.FontName, ppNVArgs.AxisFontSize, ppNVArgs.Interpreter, xHA, xVA);
+                        xTickHeight = b + t;
+                    else
+                        xTickHeight = 0;
+                    end
+
+                    cb.Position = [pos(1),...
+                        pos(2)-xTickHeight,pos(3),pos(4)];
+
+                case {"east","west","north","south"}
+                    % no adjustment needed
+
+                otherwise % 'manual' or unusual cases: infer side by geometry
+                    % no adjustment needed
+            end
+        end
+    end
+
     axisOffset = [leftOffset, rightOffset, bottomOffset, topOffset];
 
 end
 
-function [leftOffset, rightOffset, bottomOffset, topOffset, moveTitle] = getTextExtents(ax,ppNVArgs,subW,subH)
+function [leftOffset, rightOffset, bottomOffset, topOffset, moveTitle] = getTextExtents(ax,ppNVArgs,subW,subH,NVArgs)
 %GETTEXTEXTENTS Compute margins required to avoid clipping ticks/labels.
 %
 %   Returns LEFT/RIGHT/BOTTOM/TOP offsets in points that guarantee room for
@@ -837,9 +988,21 @@ function [leftOffset, rightOffset, bottomOffset, topOffset, moveTitle] = getText
 %   title. Also checks whether plotted data overlaps the title glyph box,
 %   suggesting the title be moved above the axes.
 %   Also checks for color bars
+arguments
+        ax (1,1) matlab.graphics.axis.Axes
+        ppNVArgs (1,1) struct
+        subW (1,1) double {numericPositiveScalar}
+        subH (1,1) double {numericPositiveScalar}
+        NVArgs.hasVisibleCB (1,1) logical = false
+        NVArgs.moveTitle (1,1) logical = false
+    end
 
     Spacing = ppNVArgs.SpacingOffset;
     tickLength = ppNVArgs.TickLength(1);
+
+    if hasDualYAxis(ax)
+        yyaxis left
+    end
     XTickRotation = ax.XTickLabelRotation;
     YTickRotation = ax.YTickLabelRotation;
 
@@ -959,7 +1122,38 @@ function [leftOffset, rightOffset, bottomOffset, topOffset, moveTitle] = getText
     else
         rightOffset = minRight + padding;
     end
-    
+
+    % Extra right margin if yyaxis right is present
+    if hasDualYAxis(ax)
+        rinfo = getYAxisInfo(ax,2);
+        rightTickWidth  = 0;
+        rightLabelWidth = 0;
+
+        % widest right tick label
+        if ~isempty(rinfo.Labels)
+            [~, ridx] = max(cellfun(@strlength, rinfo.Labels));
+            [LH,RH,~,~] = measureTextOverhang( ...
+                rinfo.Labels{ridx}, ax.YAxis(2).TickLabelRotation, ...
+                ppNVArgs.FontName, ppNVArgs.AxisFontSize, ppNVArgs.Interpreter, ...
+                'left','middle');
+            rightTickWidth = LH + RH;
+        end
+
+        % vertical right ylabel (measure width budget it consumes)
+        if ~isempty(rinfo.LabelStr)
+            [LH,RH,~,~] = measureTextOverhang( ...
+                rinfo.LabelStr, -90, ...            % will render rotated -90 on the right
+                ppNVArgs.FontName, ppNVArgs.AxisFontSize, ppNVArgs.Interpreter, ...
+                'center','middle');
+            rightLabelWidth = LH + RH;
+        end
+
+        % keep enough room for ticks, tick marks, a little padding, and the label
+        rightOffset = max( rightOffset, ...
+            2*Spacing + tickLength + rightTickWidth + rightLabelWidth + padding);
+    end
+
+
     % --------------------------- BOTTOM OFFSET ---------------------------
     % distance from the bottom edge to the origin
     bottomOffset = (1*Spacing + xLabelSize(2) + xTickHeight + tickLength);
@@ -1082,6 +1276,17 @@ function [leftOffset, rightOffset, bottomOffset, topOffset, moveTitle] = getText
         topOffset = max(B+T,topOffset);
     end
 
+    if NVArgs.hasVisibleCB
+        [cbL,cbR,cbB,cbT] = colorbarExtraOffsets(ax, Spacing, ppNVArgs);
+        leftOffset   = leftOffset   + cbL;
+        rightOffset  = rightOffset  + cbR;
+        bottomOffset = bottomOffset + cbB;
+        topOffset    = topOffset    + cbT;
+        if any([moveTitle,NVArgs.moveTitle])
+            topOffset = topOffset + T;
+        end
+    end
+
     % Round to quarter points for stable Illustrator alignment
     leftOffset   = roundQtr(leftOffset);
     rightOffset  = roundQtr(rightOffset);
@@ -1145,4 +1350,118 @@ end
 function out = ternary(cond, a, b)
 %TERNARY Simple ternary helper (returns A if COND, else B).
     if cond, out = a; else, out = b; end
+end
+
+function tf = hasDualYAxis(ax)
+% HASDUALYAXIS Return true if this axes has a right-side yyaxis ruler
+    tf = isprop(ax,'YAxis') && numel(ax.YAxis) >= 2 && isgraphics(ax.YAxis(2));
+    if numel(ax.YAxis) > 2 || numel(isgraphics(ax.YAxis)) > 2
+        warning('pubPlot detected more than 2 y-axis which is outside the current scope. Proceed with caution.')
+    end
+end
+
+function info = getYAxisInfo(ax, idx)
+% GETYAXISINFO Gather tick/label/scale info for left (idx=1) or right (idx=2) y-axis
+% Only works for multiple (two?) axis
+    r = ax.YAxis(idx);   % NumericRuler object
+    info.Scale     = r.Scale;            % 'linear' | 'log'
+    info.Limits    = r.Limits;           % [min max]
+    % Ticks & labels (defend across releases)
+    try, info.Ticks  = r.TickValues; catch, info.Ticks  = r.Tick;  end
+    try, info.Labels = r.TickLabels;  catch, info.Labels = {};     end
+    if ischar(info.Labels) || isstring(info.Labels), info.Labels = cellstr(info.Labels); end
+    info.LabelStr  = r.Label.String;
+    info.Color     = r.Color;
+end
+
+function cbs = colorbarsForAxes(ax)
+% COLORBARFORAXES Return ColorBar objects that belong to axes AX.
+
+    fig = ancestor(ax,'figure');
+    allCbs = findall(fig,'Type','ColorBar');
+
+    mask = false(size(allCbs));
+    for k = 1:numel(allCbs)
+        cb = allCbs(k);
+        if isprop(cb,'Axes')          % modern MATLAB
+            mask(k) = isequal(cb.Axes, ax);
+        elseif isprop(cb,'Peer')      % older releases
+            mask(k) = isequal(cb.Peer, ax);
+        else
+            mask(k) = false;
+        end
+    end
+    cbs = allCbs(mask);
+end
+
+function [dL,dR,dB,dT] = colorbarExtraOffsets(ax, paddingPts, ppNVArgs)
+% COLORBAREXTRAOFFSETS Determines the extra margins (points) to add around
+% AX due to outside colorbars.
+% Inside colorbars ('east'|'west'|'north'|'south') eat into the plot 
+% rectangle, not the outside margin. If you want to support those, reduce 
+% plotWidth/plotHeight accordingly instead of changing offsets.
+
+    if nargin < 2
+        paddingPts = 1; 
+    end
+
+    [dL,dR,dB,dT] = deal(0);
+
+    % Find all colorbars for this axis
+    cbs = colorbarsForAxes(ax);
+
+    for k = 1:numel(cbs)
+
+        cb = cbs(k);
+
+        % Set units to points and format colorbar
+        set(cb, 'Units', 'points', 'FontSize', ppNVArgs.FontSize, ...
+            'FontName', ppNVArgs.FontName, 'LineWidth', ppNVArgs.AxisLineWidth,...
+            'TickDirection','out');
+
+        pos = cb.Position; % [x y w h] in points
+
+        % Set tick length
+        tickLength = ppNVArgs.TickLength(1)/max([pos(3),pos(4)]);
+        set(cb,'TickLength',tickLength)
+
+        loc = lower(string(cb.Location));
+
+        % For the longest tick string, find the height for calc. extents
+        tL = 0; tR = 0; tB = 0; tT = 0;
+        if ~isempty(cb.TickLabels)
+            Tx = cellfun(@strlength, cb.TickLabels); [~,ix] = max(Tx);
+            [tL,tR,tB,tT] = measureTextOverhang(cb.TickLabels{ix}, 0, ppNVArgs.FontName, ppNVArgs.AxisFontSize, ppNVArgs.Interpreter, 'center', 'middle');
+        end
+
+        switch loc
+            case "eastoutside"
+                dR = max(dR, pos(3) + 2*paddingPts + tickLength + tL + tR);
+            case "westoutside"
+                dL = max(dL, pos(3) + 2*paddingPts + tickLength + tL + tR);
+            case "northoutside"
+                dT = max(dT, pos(4) + 2*paddingPts + tickLength + tB + tT);
+            case "southoutside"
+                dB = max(dB, pos(4) + 2*paddingPts + tickLength + tB + tT);
+
+            % If colorbar is inside the axes: do not add outer margins here.
+            % If you need to honor inside colorbars, shrink inner width/height instead.
+            case {"east","west","north","south"}
+                % no outer offset; handle by reducing plotWidth/plotHeight if desired
+
+            otherwise % 'manual' or unusual cases: infer side by geometry
+                ax.Units = 'points';
+                ap = ax.Position; 
+
+                toRight  = pos(1) >= ap(1)+ap(3);
+                toLeft   = pos(1)+pos(3) <= ap(1);
+                below    = pos(2)+pos(4) <= ap(2);
+                above    = pos(2) >= ap(2)+ap(4);
+
+                if toRight, dR = max(dR, pos(3) + paddingPts); end
+                if toLeft,  dL = max(dL, pos(3) + paddingPts); end
+                if above,   dT = max(dT, pos(4) + paddingPts); end
+                if below,   dB = max(dB, pos(4) + paddingPts); end
+        end
+    end
 end

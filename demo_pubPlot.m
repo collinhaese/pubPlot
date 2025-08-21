@@ -119,17 +119,18 @@ plot(x,cos(x),'DisplayName','cos');
 legend('Location','best'); title('Legend demo');
 pubPlot();
 
-% pubPlot() does not currently take into account colorbars, so it will
-% likely be cut off
+%% 5) Colorbars
+% pubPlot() can handle colorbars for the most part
 figure('Color','w');
-imagesc(peaks(200)); axis image; colormap(parula); colorbar;
+imagesc(peaks(200));
+% axis image; 
+colormap(parula); colorbar('eastoutside'); 
 title('imagesc + colorbar'); xlabel('x'); ylabel('y');
 % pubPlot will style fonts and trim axes whitespace. The colorbar axis itself
 % is not repositioned; adjust colorbar Position manually if needed.
-pubPlot(Width="single",Height=220);
+pubPlot(Width="single",Height=220,MoveTitleAboveAxis=true);
 
-
-%% 5) Log axes (semilogx / loglog) + title collision avoidance
+%% 6) Log axes (semilogx / loglog) + title collision avoidance
 % Non-linear axes are supported
 % pubPlot() can also detect if data is overlapping the title and
 % automatically move the title above the ticks
@@ -152,12 +153,17 @@ title('LogLog'); xlabel('x'); ylabel('y');
 % you can force it too
 pubPlot(Width="1.5",MoveTitleAboveAxis=true);
 
-%% 6) Interpreters: 'tex' vs 'latex' vs 'none'
+%% 7) Interpreters: 'tex' vs 'latex' vs 'none'
 % Latex labels are respected
 x = linspace(-3.8,3.8);
 figure('Color','w');
 plot(x, sin(x));
 title('TeX default'); xlabel('x'); ylabel('y');
+
+% we can also put on a second y-axis
+yyaxis right
+yticks([0:0.2:1])
+ylabel('Right Side')
 pubPlot(Interpreter="tex");
 
 figure('Color','w');
@@ -173,7 +179,7 @@ title('Literal ^ and _','Interpreter','none');
 xlabel('x_^ (rad)_','Interpreter','none'); ylabel('y^3_','Interpreter','none');
 pubPlot(Interpreter="none");
 
-%% 7) Exporting — EPS via pubPlot, PNG/PDF via exportgraphics
+%% 8) Exporting — EPS via pubPlot, PNG/PDF via exportgraphics
 % Exporting figures is easy with pubPlot().
 % Pass the Filename and extension(s) you want as arguments.
 % IMPORTANT: pubPlot() modifies the .eps file to make importing into
@@ -191,7 +197,7 @@ figure('Color','w');
 plot(x,cos(x),'b','LineWidth',1.2); title('Export – PNG/PDF'); xlabel('x'); ylabel('cos(x)');
 pubPlot('Filename','demo_pubPlot_eps','FileExtension',{'.png','.pdf'});  % no filename here
 
-%% 8) Reusing the same “style” across many figures
+%% 9) Reusing the same “style” across many figures
 % You can also force the same layout in plots if desired.
 % Pass the desired spacing as a set of options from pubPlot().
 % Notice how in the second plot, the same spacing is maintained around the
