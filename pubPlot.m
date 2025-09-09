@@ -76,8 +76,8 @@ function [fig, varargout] = pubPlot(NVArgs)
 % Validate font names
 % Force board size on eps
 % Exponential Ticks - currently lose the order of magnitude
-% Colorbars not supported
-% Rotated ticks still seems a bit off (recommended to use 45 deg)
+% Rotated ticks a bit off (recommended to use 45 deg)
+%   I.e. at 30 deg, they don't align where they should
 % Rotated ticks on yyaxis is unchecked
 
 
@@ -265,7 +265,7 @@ if isSubplotFigure
         if hasVisibleCB
             % if any colorbar is detected, print warning
             if NVArgs.verbosity > 1
-                warning('Colorbar detected in subplot. Supergrid colorbars are not currently supported. Supress this message by setting verbosity < 2.')
+                warning('Colorbar detected in subplot. Supergrid colorbars are not currently supported. Suppress this message by setting verbosity < 2.')
             end
             [L,R,B,T,moveTitleRequired(k)] = getTextExtents(axList(k), NVArgs, widths(k), heights(k), 'hasVisibleCB',true, 'moveTitle', NVArgs.MoveTitleAboveAxis);
         else
@@ -491,7 +491,7 @@ if ~isempty(NVArgs.Filename)
         fclose(fid);
 
         if strcmpi(NVArgs.ExportMessage,'on') 
-            fprintf('Successfully updated and exported %s. Supress this message by setting ExportMessage=''off.''\n',Filename)
+            fprintf('Successfully updated and exported %s. Suppress this message by setting ExportMessage=''off.''\n',Filename)
         elseif NVArgs.verbosity > 2 
             fprintf('Successfully updated and exported %s.\n',Filename)
         end
@@ -554,8 +554,26 @@ function [left, right, bottom, top] = measureTextOverhang(str, rotation, fontNam
 %   the axis-aligned glyph bounds, given TEXT alignment and rotation.
 %   This measures visible text, not bounding "box" UI padding.
 
+    if isempty(str)
+        [left,right,bottom,top] = deal(0);
+        return
+    end
+
+    % Defaults & validation
+    if nargin < 5 || isempty(interpreter), interpreter = 'tex'; end
     if nargin < 6 || isempty(ha), ha = 'center'; end
     if nargin < 7 || isempty(va), va = 'top';    end
+
+    % Accept string or char
+    if isstring(fontName),    fontName = char(fontName);    end
+    if isstring(interpreter), interpreter = char(interpreter); end
+    if isstring(ha),          ha = char(ha);                end
+    if isstring(va),          va = char(va);                end
+
+    % Validate tokens (throws helpful errors if wrong)
+    ha = validatestring(ha, {'left','center','right'});
+    va = validatestring(va, {'top','cap','middle','baseline','bottom'});
+    interpreter = validatestring(interpreter, {'tex','latex','none'});
 
     % Isolated, consistent environment
     tmpFig = figure('Visible','off','Units','points','Position',[100 100 300 200]);
@@ -704,8 +722,8 @@ function [ax, axisOffset] = reduceWhitespace(ax,ppNVArgs,subW,subH,NVArgs)
         NVArgs.hasVisibleCB (1,1) logical = false
     end
     
-    % manually reduce whitespace
-    % only works for non-tiled layouts
+    % Manually reduce whitespace
+    % Only works for non-tiled layouts
     if isInTiledLayout(ax)
         % Defer sizing to tiled layout; still tighten padding
         tl = ancestor(ax,'matlab.graphics.layout.TiledChartLayout','toplevel');
@@ -732,7 +750,7 @@ function [ax, axisOffset] = reduceWhitespace(ax,ppNVArgs,subW,subH,NVArgs)
     yOffset = NVArgs.yOffset;
     tickLength = ppNVArgs.TickLength(1); % desired tick length
     
-    % record axis limits and labels to preserve their original values
+    % Record axis limits and labels to preserve their original values
     if hasDualYAxis(ax)
         yyaxis left
     end
@@ -753,7 +771,7 @@ function [ax, axisOffset] = reduceWhitespace(ax,ppNVArgs,subW,subH,NVArgs)
     
     % Compute offsets if not supplied
     if isempty(NVArgs.customOffset)
-        % determine offsets to avoid clipping text
+        % Determine offsets to avoid clipping text
         if NVArgs.hasVisibleCB
             [leftOffset, rightOffset, bottomOffset, topOffset, moveTitle] = getTextExtents(ax, ppNVArgs, subW, subH, 'hasVisibleCB',true, 'moveTitle', NVArgs.moveTitle);
         else
@@ -767,11 +785,13 @@ function [ax, axisOffset] = reduceWhitespace(ax,ppNVArgs,subW,subH,NVArgs)
         topOffset    = NVArgs.customOffset(4);
     end
 
-    % find x and y label extents
+    % Find x and y label extents
     
     % Flags for presence of labels
     hasXLabel = ~isempty(ax.XLabel.String);
     hasYLabel = ~isempty(ax.YLabel.String);
+    hasXTickLabels = ~isempty(ax.XTickLabel);
+    hasYTickLabels = ~isempty(ax.YTickLabel);
 
     % Plot area width and height (points)
     plotW = subW - (leftOffset + rightOffset);
@@ -791,15 +811,26 @@ function [ax, axisOffset] = reduceWhitespace(ax,ppNVArgs,subW,subH,NVArgs)
     % Size-aware tick length (normalize by longer axis)
     % After setting axix Position, before placing any text:
     drawnow;  % ensure axis Position is final for accurate point mapping
+
+    % Axes rectangle width and height. Note, this is not equal to the
+    % visible plot box if the aspect ratio is constrained through axis
+    % equal, axis square, etc.
     axisW = ax.Position(3);
     axisH = ax.Position(4);
+
+    % Visible plot-box (respects aspect constraints)
+    plotBoxPoints = getPlotBoxPoints(ax); % [x y w h] in axes points
+    plotBoxX0 = plotBoxPoints(1); 
+    plotBoxY0 = plotBoxPoints(2); 
+    plotBoxWidth = plotBoxPoints(3); 
+    plotBoxHeight = plotBoxPoints(4);
     
-    % adjust tick length: use actual axis size so the ratio is exact
-    ax.TickLength = [tickLength/max([axisW,axisH]), tickLength/max([axisW,axisH])];
+    % Adjust tick length: use actual axis size so the ratio is exact
+    ax.TickLength = [tickLength/max([plotBoxWidth,plotBoxHeight]), tickLength/max([plotBoxWidth,plotBoxHeight])];
 
     % Functions to map x/y data point to position in points (linear/log)
-    XDataToPt = @(x) mapDataToPoints(ax.XScale, XLim, x, axisW);
-    YDataToPt = @(y) mapDataToPoints(ax.YScale, YLim, y, axisH);
+    XDataToPt = @(x) mapDataToPoints(ax.XScale, XLim, x, plotBoxWidth);
+    YDataToPt = @(y) mapDataToPoints(ax.YScale, YLim, y, plotBoxHeight);
 
     % Remove exisiting tick labels and redraw as text so we can position in
     % point space
@@ -807,44 +838,49 @@ function [ax, axisOffset] = reduceWhitespace(ax,ppNVArgs,subW,subH,NVArgs)
     if hasDualYAxis(ax); ax.YAxis(1).TickLabels = {}; else; ax.YTickLabel = {}; end
 
     % X ticks
-    for i = 1 : numel(XTick)
-        xLoc = XDataToPt(XTick(i));
-        yLoc = -(tickLength + 2*Spacing); % axes-local, just below axis line
+    if hasXTickLabels
         [vertAlign,horizAlign] = tickAlignForRotation(XTickRotation,'x');
-
-        text(xLoc, yLoc, XTickLabels{i}, ...
-            'Parent', ax, 'Units','points', ...
-            'Rotation', XTickRotation, ...
-            'HorizontalAlignment', horizAlign, ...
-            'VerticalAlignment',   vertAlign, ...
-            'FontSize', ax.FontSize, 'FontName', ax.FontName, ...
-            'Color', ppNVArgs.FontColor, ...
-            'Clipping','off');    % allow negative y
+        for i = 1 : numel(XTick)
+            xLoc = XDataToPt(XTick(i));
+            yLoc = -(tickLength + 2*Spacing); % axes-local, just below axis line
+    
+            text(xLoc, yLoc, XTickLabels{i}, ...
+                'Parent', ax, 'Units','points', ...
+                'Rotation', XTickRotation, ...
+                'HorizontalAlignment', horizAlign, ...
+                'VerticalAlignment',   vertAlign, ...
+                'FontSize', ax.FontSize, 'FontName', ax.FontName, ...
+                'Color', ppNVArgs.FontColor, ...
+                'Clipping','off');    % allow negative y
+        end
     end
 
 
     % Left-side y-axis
     % Y ticks
-    for i = 1 : numel(YTick)
-        xLoc = -(2*Spacing + tickLength); % to the left of axis line
-        yLoc = YDataToPt(YTick(i));
+    if hasYTickLabels
         [vertAlign,horizAlign] = tickAlignForRotation(YTickRotation,'y');
-
-        text(xLoc, yLoc, YTickLabels{i}, ...
-            'Parent', ax, 'Units','points', ...
-            'Rotation', YTickRotation, ...
-            'HorizontalAlignment', horizAlign, ...
-            'VerticalAlignment',   vertAlign, ...
-            'FontSize', ax.FontSize, 'FontName', ax.FontName, ...
-            'Color', ppNVArgs.FontColor, ...
-            'Clipping','off');
+        for i = 1 : numel(YTick)
+            xLoc = -(2*Spacing + tickLength); % to the left of axis line
+            yLoc = YDataToPt(YTick(i));
+    
+            text(xLoc, yLoc, YTickLabels{i}, ...
+                'Parent', ax, 'Units','points', ...
+                'Rotation', YTickRotation, ...
+                'HorizontalAlignment', horizAlign, ...
+                'VerticalAlignment',   vertAlign, ...
+                'FontSize', ax.FontSize, 'FontName', ax.FontName, ...
+                'Color', ppNVArgs.FontColor, ...
+                'Clipping','off');
+        end
     end
 
     % Manually place axis labels (constant offsets from origin so subplots align)
 
     % X label
     if hasXLabel
-        text(axisW/2, -(bottomOffset - 1*Spacing), ax.XLabel.String, ...
+        xlabY = plotBoxY0 - (bottomOffset - 1*Spacing);
+        text(plotBoxX0 + plotBoxWidth/2, xlabY, ax.XLabel.String, ...
             'Parent', ax, 'Units','points', ...
             'HorizontalAlignment','center', 'VerticalAlignment','bottom', ...
             'FontSize', ax.FontSize,'FontName',ax.FontName,...
@@ -854,7 +890,8 @@ function [ax, axisOffset] = reduceWhitespace(ax,ppNVArgs,subW,subH,NVArgs)
 
     % Y label
     if hasYLabel
-        text(-(leftOffset + 1*Spacing), axisH/2, ax.YLabel.String, ...
+        ylabX = plotBoxX0 - (leftOffset + 1*Spacing);
+        text(ylabX, plotBoxY0 + plotBoxHeight/2, ax.YLabel.String, ...
             'Parent', ax, 'Units','points', ...
             'HorizontalAlignment','center', 'VerticalAlignment','top', ...
             'Rotation',90, ...
@@ -869,7 +906,7 @@ function [ax, axisOffset] = reduceWhitespace(ax,ppNVArgs,subW,subH,NVArgs)
         rinfo = getYAxisInfo(ax,2);
 
         % Map right y-data to points using the right ruler's scale/limits
-        YDataToPt_R = @(y) mapDataToPoints(rinfo.Scale, rinfo.Limits, y, axisH);
+        YDataToPt_R = @(y) mapDataToPoints(rinfo.Scale, rinfo.Limits, y, plotBoxWidth);
 
         % Suppress built-in right tick labels so we don't double-draw
         try, ax.YAxis(2).TickLabels = {}; end
@@ -878,7 +915,7 @@ function [ax, axisOffset] = reduceWhitespace(ax,ppNVArgs,subW,subH,NVArgs)
         for i = 1:numel(rinfo.Ticks)
             yLoc = YDataToPt_R(rinfo.Ticks(i));
             if i <= numel(rinfo.Labels)
-                text( axisW + (2*Spacing + tickLength), yLoc, rinfo.Labels{i}, ...
+                text( plotBoxX0 + plotBoxWidth + (2*Spacing + tickLength), yLoc, rinfo.Labels{i}, ...
                     'Parent', ax, 'Units','points', ...
                     'HorizontalAlignment','left', 'VerticalAlignment','middle', ...
                     'FontSize', ax.FontSize, 'FontName', ax.FontName, ...
@@ -888,7 +925,8 @@ function [ax, axisOffset] = reduceWhitespace(ax,ppNVArgs,subW,subH,NVArgs)
 
         % Place right ylabel (vertical, reading bottom-up)
         if ~isempty(rinfo.LabelStr)
-            text( axisW + (rightOffset - Spacing), axisH/2, rinfo.LabelStr, ...
+            rlabX = plotBoxX0 + plotBoxWidth + (rightOffset - Spacing);
+            text( rlabX, plotBoxY0 + plotBoxHeight/2, rinfo.LabelStr, ...
                 'Parent', ax, 'Units','points', ...
                 'Rotation', -90, 'HorizontalAlignment','center', 'VerticalAlignment','top', ...
                 'FontSize', ax.FontSize, 'FontName', ax.FontName, 'Color', rinfo.Color);
@@ -904,7 +942,7 @@ function [ax, axisOffset] = reduceWhitespace(ax,ppNVArgs,subW,subH,NVArgs)
     if ~isempty(ax.Title.String)
         putAbove = ppNVArgs.MoveTitleAboveAxis || any([NVArgs.moveTitle, moveTitle]);
         va = ternary(putAbove,'bottom','middle');
-        text(axisW/2, axisH, ax.Title.String, ...
+        text(plotBoxX0 + plotBoxWidth/2, plotBoxY0 + plotBoxHeight, ax.Title.String, ...
             'Parent', ax, 'Units','points', ...
             'HorizontalAlignment','center','VerticalAlignment',va, ...
             'FontSize', ax.FontSize,'FontName',ax.FontName, ...
@@ -929,7 +967,7 @@ function [ax, axisOffset] = reduceWhitespace(ax,ppNVArgs,subW,subH,NVArgs)
                     [yVA,yHA] = tickAlignForRotation(YTickRotation,'y');
 
                     % For the longest Y tick string, find the width for calc. extents
-                    if ~isempty(YTick)
+                    if ~isempty(YTick) && ~isempty(YTickLabels)
                         Ly = cellfun(@strlength, YTickLabels); [~,iy] = max(Ly);
                         [l,r,~,~] = measureTextOverhang(YTickLabels{iy}, YTickRotation, ppNVArgs.FontName, ppNVArgs.AxisFontSize, ppNVArgs.Interpreter, yHA, yVA);
                         yTickWidth = l + r;
@@ -956,7 +994,7 @@ function [ax, axisOffset] = reduceWhitespace(ax,ppNVArgs,subW,subH,NVArgs)
                     % place below xticks
                     [xVA,xHA] = tickAlignForRotation(XTickRotation,'x');
                     % For the longest X tick string, find the height for calc. extents
-                    if ~isempty(XTick)
+                    if ~isempty(XTick) && ~isempty(XTickLabels) 
                         Lx = cellfun(@strlength, XTickLabels); [~,ix] = max(Lx);
                         [~,~,b,t] = measureTextOverhang(XTickLabels{ix}, XTickRotation, ppNVArgs.FontName, ppNVArgs.AxisFontSize, ppNVArgs.Interpreter, xHA, xVA);
                         xTickHeight = b + t;
@@ -1011,7 +1049,7 @@ arguments
     [yVA,yHA] = tickAlignForRotation(YTickRotation,'y');
 
     % For the longest X tick string, find the height for calc. extents
-    if ~isempty(ax.XTick)
+    if ~isempty(ax.XTick) && ~isempty(ax.XTickLabel)
         Lx = cellfun(@strlength, ax.XTickLabel); [~,ix] = max(Lx);
         [~,~,b,t] = measureTextOverhang(ax.XTickLabel{ix}, XTickRotation, ppNVArgs.FontName, ppNVArgs.AxisFontSize, ppNVArgs.Interpreter, xHA, xVA);
         xTickHeight = b + t;
@@ -1020,7 +1058,7 @@ arguments
     end
 
     % For the longest Y tick string, find the width for calc. extents
-    if ~isempty(ax.YTick)
+    if ~isempty(ax.YTick) && ~isempty(ax.YTickLabel)
         Ly = cellfun(@strlength, ax.YTickLabel); [~,iy] = max(Ly);
         [l,r,~,~] = measureTextOverhang(ax.YTickLabel{iy}, YTickRotation, ppNVArgs.FontName, ppNVArgs.AxisFontSize, ppNVArgs.Interpreter, yHA, yVA);
         yTickWidth = l + r;
@@ -1030,16 +1068,18 @@ arguments
     
     % Find extent of the text box for last tick labels (the ones which may fall
     % outside of the figure, i.e. at the X and Y limits)
-    if ~isempty(ax.XTick)
+    if ~isempty(ax.XTick) && ~isempty(ax.XTickLabel)
         [xEdgeHalfL,xEdgeHalfR,b,t] = measureTextOverhang(ax.XTickLabel{end},XTickRotation,ppNVArgs.FontName,ppNVArgs.AxisFontSize,ppNVArgs.Interpreter,xHA,xVA);
         % horizontal half-extent of the last tick label (already includes rotation)
     else
+        xEdgeHalfL = 0;
         xEdgeHalfR = 0;
     end
-    if ~isempty(ax.YTick)
+    if ~isempty(ax.YTick) && ~isempty(ax.YTickLabel)
         [l,r,yEdgeHalfB,yEdgeHalfT] = measureTextOverhang(ax.YTickLabel{end},YTickRotation,ppNVArgs.FontName,ppNVArgs.AxisFontSize,ppNVArgs.Interpreter,yHA,yVA);
         % vertical half-extent of the last tick label (already includes rotation)
     else
+        yEdgeHalfB = 0;
         yEdgeHalfT = 0;
     end
     
@@ -1464,4 +1504,43 @@ function [dL,dR,dB,dT] = colorbarExtraOffsets(ax, paddingPts, ppNVArgs)
                 if below,   dB = max(dB, pos(4) + paddingPts); end
         end
     end
+end
+
+function plotBoxPoints = getPlotBoxPoints(ax)
+%GETPLOTBOXPOINTS Return [left, bottom, width, height] of the visible plot-box in axes POINTS.
+% Accounts for cases with axis equal, axis square, daspect, or pbaspect
+
+    if ~isa(ax,'matlab.graphics.axis.Axes')
+        [left,right,bottom,top] = deal(0);
+    end
+
+    pos  = ax.Position;  % allocated axes rectangle
+
+    % Start with full axes rectangle:
+    inner = [0 0 pos(3) pos(4)];
+
+    if strcmp(ax.PlotBoxAspectRatioMode,'manual')
+        pbAR = ax.PlotBoxAspectRatio;  % [wx wy wz]
+        AR = pbAR(1)/pbAR(2);           % Aspect Ratio: width/height
+    elseif strcmp(ax.DataAspectRatioMode,'manual')
+        dx = diff(ax.XLim); dy = diff(ax.YLim);
+        dAR = ax.DataAspectRatio;      % [dx dy dz] display units per data unit
+        AR = (dx/dAR(1)) / (dy/dAR(2));
+    else
+        plotBoxPoints = inner; return;
+    end
+
+    w = inner(3); h = inner(4);
+    if w/h > AR
+        h2 = h;    
+        w2 = AR*h2;
+        x2 = (w - w2)/2; 
+        y2 = 0;
+    else
+        w2 = w;    
+        h2 = w2/AR;
+        x2 = 0;     
+        y2 = (h - h2)/2;
+    end
+    plotBoxPoints = [x2 y2 w2 h2];
 end
