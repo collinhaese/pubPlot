@@ -1498,10 +1498,45 @@ function [dL,dR,dB,dT] = colorbarExtraOffsets(ax, paddingPts, ppNVArgs)
                 below    = pos(2)+pos(4) <= ap(2);
                 above    = pos(2) >= ap(2)+ap(4);
 
-                if toRight, dR = max(dR, pos(3) + paddingPts); end
-                if toLeft,  dL = max(dL, pos(3) + paddingPts); end
-                if above,   dT = max(dT, pos(4) + paddingPts); end
-                if below,   dB = max(dB, pos(4) + paddingPts); end
+                if toRight, dR = max(dR, pos(3) + 2*paddingPts + tickLength + tL + tR); end
+                if toLeft,  dL = max(dL, pos(3) + 2*paddingPts + tickLength + tL + tR); end
+                if above,   dT = max(dT, pos(4) + 2*paddingPts + tickLength + tB + tT); end
+                if below,   dB = max(dB, pos(4) + 2*paddingPts + tickLength + tB + tT); end
+        end
+
+        % add in space for any colorbar label
+        if ~isempty (cb.Label)
+            [tL,tR,tB,tT] = measureTextOverhang(cb.Label.String, cb.Label.Rotation, ppNVArgs.FontName, ppNVArgs.AxisFontSize, ppNVArgs.Interpreter, 'center', 'middle');
+
+            switch loc
+                case "eastoutside"
+                    dR = dR + 2*paddingPts + tL + tR;
+                case "westoutside"
+                    dL = dL + 2*paddingPts + tL + tR;
+                case "northoutside"
+                    dT = dT + 2*paddingPts + tB + tT;
+                case "southoutside"
+                    dB = dB + 2*paddingPts + tB + tT;
+
+                    % If colorbar is inside the axes: do not add outer margins here.
+                    % If you need to honor inside colorbars, shrink inner width/height instead.
+                case {"east","west","north","south"}
+                    % no outer offset; handle by reducing plotWidth/plotHeight if desired
+
+                otherwise % 'manual' or unusual cases: infer side by geometry
+                    ax.Units = 'points';
+                    ap = ax.Position;
+
+                    toRight  = pos(1) >= ap(1)+ap(3);
+                    toLeft   = pos(1)+pos(3) <= ap(1);
+                    below    = pos(2)+pos(4) <= ap(2);
+                    above    = pos(2) >= ap(2)+ap(4);
+
+                    if toRight, dR = dR + 2*paddingPts + tL + tR; end
+                    if toLeft,  dL = dL + 2*paddingPts + tL + tR; end
+                    if above,   dT = dT + 2*paddingPts + tB + tT; end
+                    if below,   dB = dB + 2*paddingPts + tB + tT; end
+            end
         end
     end
 end
